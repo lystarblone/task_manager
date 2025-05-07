@@ -1,50 +1,55 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List
+from fastapi import FastAPI, HTTPException, Path, Depends
+from typing import List, Annotated
+from sqlalchemy.orm import session
+from models import Base, User, Task
+from database import engine, session_local, get_db
+from schemas import CreateUser, TaskCreate, Task as TaskResponse, User as DbUser
 
 app = FastAPI()
 
-class User(BaseModel):
-    id: int
-    username: str
+Base.metadata.create_all(bind=engine)
 
-class Task(BaseModel):
-    id: int
-    title: str
-    content: str
-    author: User
+@app.post('/add_new_user', response_model=DbUser)
+async def create_user(user: CreateUser, db: session = Depends(get_db)) -> DbUser:
+    db_user = User(
+        username=user.username,
+        password=user.password
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
 
-class TaskCreate(BaseModel):
-    title: str
-    content: str
-    author_id: int
+    return db_user
 
-users = [
-    {
-        'id': 1,
-        'username': 'Хуесос',
-    },
-    {
-        'id': 2,
-        'username': 'Пиздолиз',
-    }
-]
+@app.post('/add_new_task', response_model=TaskResponse)
+async def create_task(task: TaskCreate, db: session = Depends(get_db)) -> TaskResponse:
+    db_user = db.query(User).filter(User.id == task.author_id).first()
 
-tasks = [
-    {
-        'id': 1,
-        'title': 'Micropenis',
-        'content': 'Yohoho',
-        'author': users[0],
-    },
-    {
-        'id': 2,
-        'title': 'Aiaiai',
-        'content': 'Sisi',
-        'author': users[1]
-    }
-]
+    if not db_user:
+        raise HTTPException(404, 'нахуй иди')
 
+    db_task = Task(
+        title=task.title,
+        content=task.content,
+        author_id=task.author_id,
+    )
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+
+    return db_task
+
+@app.get('/tasks', response_model=List[TaskResponse])
+async def get_all_tasks(db: session = Depends(get_db)):
+    return db.query(Task).all()
+
+
+
+
+
+
+
+"""
 @app.get('/')
 async def home() -> str:
     return 'Hello pidor)'
@@ -54,7 +59,7 @@ async def get_all_tasks() -> List[Task]:
     return [Task(**task) for task in tasks]
 
 @app.get('/tasks/{id}')
-async def get_task(id: int) -> Task:
+async def get_task(id: Annotated[int, Path(..., title='Current task id', ge=1)]) -> Task:
     for task in tasks:
         if task['id'] == id:
             return Task(**task)
@@ -74,4 +79,4 @@ async def add_task(task: TaskCreate) -> Task:
     }
     tasks.append(new_task)
 
-    return Task(**new_task)
+    return Task(**new_task)"""
