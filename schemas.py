@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class UserBase(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., description="Имя пользователя")
+    password: str = Field(..., description="Пароль (минимум 8 символов)")
 
 class CreateUser(UserBase):
     pass
@@ -15,14 +15,12 @@ class User(BaseModel):
         orm_mode = True
 
 class TaskBase(BaseModel):
-    title: str
-    content: str
-    author_id: int
+    title: str = Field(..., description="Заголовок задачи")
+    content: str = Field(..., description="Содержимое задачи")
+    author_id: int = Field(..., ge=1, description="ID автора задачи")
 
 class Task(TaskBase):
     id: int
-    author: User
-
     class Config:
         orm_mode = True
 
