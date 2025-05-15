@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 class UserBase(BaseModel):
     username: str = Field(..., description="Имя пользователя")
-    password: str = Field(..., description="Пароль (минимум 8 символов)")
+    password: str = Field(..., description="Пароль")
 
 class CreateUser(UserBase):
     pass
@@ -12,17 +12,17 @@ class User(BaseModel):
     username: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class TaskBase(BaseModel):
-    title: str = Field(..., description="Заголовок задачи")
-    content: str = Field(..., description="Содержимое задачи")
-    author_id: int = Field(..., ge=1, description="ID автора задачи")
+    title: str
+    content: str
+    author_id: int
+
+class TaskCreate(TaskBase):
+    pass
 
 class Task(TaskBase):
     id: int
     class Config:
-        orm_mode = True
-
-class TaskCreate(TaskBase):
-    pass
+        from_attributes = True
