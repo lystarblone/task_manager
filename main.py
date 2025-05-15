@@ -1,15 +1,19 @@
 import os
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Response, Request
 from typing import Annotated, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 
 from database import get_async_session, init_db
 from models import User, Task
-from schemas import CreateUser, TaskCreate, Task as TaskResponse, User as DbUser, UserBase
+from schemas import CreateUser, TaskCreate, Task as TaskResponse, User as DbUser
 
 from authx import AuthX, AuthXConfig
+from security import hash_password, verify_password
+from fastapi.security import OAuth2PasswordRequestForm
 
 # --- Жизненный цикл приложения ---
 @asynccontextmanager
@@ -27,35 +31,49 @@ security = AuthX(config=config)
 # --- Инициализация приложения ---
 app = FastAPI(lifespan=lifespan)
 
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/", response_class=HTMLResponse)
+async def read_index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 # --------------------- AUTH ---------------------
 @app.post("/register", response_model=DbUser, tags=["auth"])
 async def register_user(
     user: CreateUser,
     db: Annotated[AsyncSession, Depends(get_async_session)]
 ):
-    result = await db.execute(select(User).where(User.username == user.username))
+    result = await db.execute(select(User).where(User.email == user.email))
     existing_user = result.scalar_one_or_none()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Имя пользователя уже занято")
+        raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
 
-    db_user = User(username=user.username, password=user.password)
+    hashed_pwd = hash_password(user.password)
+    db_user = User(email=user.email, password=hashed_pwd)
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
     return db_user
 
 
-@app.post("/login", tags=["auth"])
+@app.post("/login")
 async def login(
-    user: UserBase,
-    response: Response
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    form_data: OAuth2PasswordRequestForm = Depends()
 ):
-    if user.username == "Хуесос" and user.password == "1234":
-        token = security.create_access_token(uid="12345")
-        response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, token)
-        return {"access_token": token}
-    
-    raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
+    email = form_data.username
+    password = form_data.password
+
+    result = await db.execute(select(User).where(User.email == email))
+    db_user = result.scalar_one_or_none()
+    if not db_user or not verify_password(password, db_user.password):
+        raise HTTPException(status_code=401, detail="Неверный email или пароль")
+
+    token = security.create_access_token(uid=str(db_user.id))
+    response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, token)
+    return {"access_token": token}
+
 
 
 @app.get("/protected", tags=["auth"])

@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 
 class UserBase(BaseModel):
-    username: str = Field(..., description="Имя пользователя")
+    email: EmailStr = Field(..., description="Email пользователя")
     password: str = Field(..., description="Пароль")
 
 class CreateUser(UserBase):
@@ -9,7 +9,7 @@ class CreateUser(UserBase):
 
 class User(BaseModel):
     id: int
-    username: str
+    email: EmailStr
 
     class Config:
         from_attributes = True
